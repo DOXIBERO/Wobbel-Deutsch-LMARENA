@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Wobbel Deutsch v2 — Learn German by Running</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./style.css?v=1" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/",
+      "cannon-es": "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+
+  <!-- Loading veil (Boot) -->
+  <div id="boot-overlay"><div class="boot-card">Loading…</div></div>
+
+  <!-- Red error armor: never die silently -->
+  <div id="wo-error" hidden></div>
+
+  <script>
+    window.addEventListener('error', (e) => {
+      const el = document.getElementById('wo-error');
+      if (el) { el.hidden = false; el.textContent = '⚠️ ' + (e.message || 'error'); }
+    });
+  </script>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
