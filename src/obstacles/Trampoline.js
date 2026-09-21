@@ -48,6 +48,11 @@ export class Trampoline {
     soundFX.play('bounce');
   }
 
+  /** Part 058 common interface (event-driven — nothing per-frame). */
+  update(_dt, _beanBody) { /* collision events do the work */ }
+  activate() {} deactivate() {}
+  destroy() { this.dispose(); }
+
   dispose() {
     physicsWorld.removeBody(this.body);
     this.mesh.geometry.dispose(); this.mesh.material.dispose();

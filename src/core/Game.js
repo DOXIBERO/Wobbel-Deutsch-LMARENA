@@ -37,6 +37,12 @@ import { soundFX } from '../audio/SoundFX.js';
 import { music } from '../audio/MusicSystem.js';
 import { AudioSync } from '../audio/AudioSync.js';
 import { WordPromptHUD } from '../ui/WordPromptHUD.js';
+import { RoundManager } from './RoundManager.js';
+import { DifficultyScaler } from './DifficultyScaler.js';
+import { QualityManager } from './QualityManager.js';
+import { WordBankScreen } from '../ui/WordBankScreen.js';
+import { SettingsScreen } from '../ui/SettingsScreen.js';
+import { TutorialOverlay } from '../ui/TutorialOverlay.js';
 import { BootState } from '../states/BootState.js';
 import { MenuState } from '../states/MenuState.js';
 import { CountdownState } from '../states/CountdownState.js';
@@ -81,8 +87,15 @@ export class Game {
     this.voice = germanVoice;                             // 037
     this.music = music;                                   // 039
 
+    // ── Batch 3 systems (066, 072-074)
+    this.roundManager = new RoundManager(this);           // 066
+    this.wordBank = new WordBankScreen(this);             // 072
+    this.settings = new SettingsScreen(this);             // 073
+    this.tutorial = new TutorialOverlay(this);            // 074
+
     // Volume from profile settings
     soundFX.setVolume(this.profile.settings.audioVol);
+    QualityManager.init(this);                            // 075 (saved quality)
 
     // ── Round/session state
     this.session = null;          // { presets, index }
@@ -120,6 +133,13 @@ export class Game {
       this.inputManager.update(dt);
       this.physics.step(dt);
       this.physics.syncPairs();
+
+      // Physics sanity guard: a solver hiccup (rare phantom contact) must
+      // never fling the bean into orbit — clamp absurd velocities instead.
+      const bv = this.bean.body.velocity;
+      const sp2 = bv.lengthSquared();
+      if (sp2 > 3600) bv.scale(60 / Math.sqrt(sp2), bv);   // hard cap 60 m/s
+      if (this.bean.body.position.y > 60) { this.bean.body.position.y = 8; bv.set(0, 0, 0); }
 
       // Visual layers (additive over physics)
       const v = this.bean.body.velocity;
@@ -161,19 +181,23 @@ export class Game {
     this.loop.start();
   }
 
-  /** Menu "SPIELEN": begin a full session R1→R5. */
+  /** Menu "SPIELEN": begin a full session (RoundManager plan, Part 066). */
   startSession() {
-    this.session = { presets: [1, 2, 3, 4, 5].map((i) => this.roundConfig.getPreset(i)), index: 0 };
     this.sessionTotal = 0;
+    this.roundManager.startSession({ rounds: 5 });
     this.state.transition('COUNTDOWN');
   }
 
-  /** Called by CountdownState: build the round's word plan. */
+  /** Called by CountdownState: build the round's word plan (+template course info). */
   prepareRound() {
-    this.currentRound = this.session.presets[this.session.index];
-    this.wordSelector.startRound();
-    this.roundWords = [0, 1, 2].map((gateIndex) =>
-      this.wordSelector.selectForGate(gateIndex, this.currentRound, this.srs, this.currentRound.id));
+    if (this.roundManager.active) {
+      this.roundManager.prepareRound();     // sets roundWords + currentRound
+    } else {
+      this.currentRound = this.session.presets[this.session.index];
+      this.wordSelector.startRound();
+      this.roundWords = [0, 1, 2].map((gateIndex) =>
+        this.wordSelector.selectForGate(gateIndex, this.currentRound, this.srs, this.currentRound.id));
+    }
   }
 
   /** Accumulate the session total at round end (RoundEndState reads it). */

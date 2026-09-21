@@ -21,8 +21,10 @@ const DUR = { jump: 0.6, dive: 0.8, stumble: 0.5, victory: 3.0 };
 export class BeanAnimator {
   /**
    * @param {import('./BeanModel.js').BeanModel} model
+   * @param {{globalEvents?:boolean}} [opts] bots pass {globalEvents:false}
+   *        so player jump/dive events don't animate every bot.
    */
-  constructor(model) {
+  constructor(model, opts = {}) {
     this.model = model;
     this.clock = new THREE.Clock();
     this.time = 0;
@@ -40,10 +42,12 @@ export class BeanAnimator {
     this.mixer = null;
     this.gltfActions = {};
 
-    eventBus.on('player:jump', () => this.play('jump'));
-    eventBus.on('player:dive', () => this.play('dive'));
-    eventBus.on('player:stumble', () => this.play('stumble'));
-    eventBus.on('player:win', () => this.play('victory'));
+    if (opts.globalEvents !== false) {
+      eventBus.on('player:jump', () => this.play('jump'));
+      eventBus.on('player:dive', () => this.play('dive'));
+      eventBus.on('player:stumble', () => this.play('stumble'));
+      eventBus.on('player:win', () => this.play('victory'));
+    }
   }
 
   #snapshotRest() {

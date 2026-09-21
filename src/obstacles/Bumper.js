@@ -56,6 +56,11 @@ export class Bumper {
     eventBus.emit('bumper:hit', {});
   }
 
+  /** Part 058 common interface (event-driven — nothing per-frame). */
+  update(_dt, _beanBody) { /* collision events do the work */ }
+  activate() {} deactivate() {}
+  destroy() { this.dispose(); }
+
   dispose() {
     this.body.removeEventListener('collide', this.#hit);
     physicsWorld.removeBody(this.body);

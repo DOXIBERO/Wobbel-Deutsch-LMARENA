@@ -49,8 +49,8 @@ class GermanVoice {
    * @param {number} [rate]
    * @param {number} [pitch]
    */
-  speak(word, rate = 0.8, pitch = 1.0) {
-    this.queue.push({ word, rate, pitch });
+  speak(word, rate, pitch = 1.0) {
+    this.queue.push({ word, rate: rate ?? this.defaultRate ?? 0.8, pitch });
     if (!this.speaking) this.#next();
   }
 

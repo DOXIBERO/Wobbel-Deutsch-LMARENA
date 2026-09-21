@@ -42,11 +42,11 @@ export class MenuState {
     });
     el.querySelector('[data-action="words"]').addEventListener('click', () => {
       sfx.beep(660, 0.08, 0.08);
-      alert('📚 Wörter — coming in a later part!');
+      this.game.wordBank.show();        // Part 072
     });
     el.querySelector('[data-action="settings"]').addEventListener('click', () => {
       sfx.beep(660, 0.08, 0.08);
-      alert('⚙️ Einstellungen — coming in a later part!');
+      this.game.settings.show();        // Part 073
     });
 
     // Menu camera: slow orbit around the bean

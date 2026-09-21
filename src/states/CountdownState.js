@@ -28,6 +28,19 @@ export class CountdownState {
     document.body.appendChild(this._el);
     soundFX.play('beep');
     this.#prepareRound();
+    // ── Part 067: "RUNDE X/Y" + course preview above the countdown
+    const rm = this.game.roundManager;
+    if (rm?.active && rm.total > 0) {
+      const cur = rm.current;
+      const stars = '★'.repeat(cur.difficulty) + '☆'.repeat(3 - cur.difficulty);
+      const head = document.createElement('div');
+      head.style.cssText = `position:fixed; top:9%; left:50%; transform:translateX(-50%); z-index:33;
+        color:#fff; font-family:system-ui,sans-serif; text-align:center; text-shadow:0 4px 18px rgba(0,0,0,.6);`;
+      head.innerHTML = `<div style="font-size:26px; font-weight:800;">RUNDE ${rm.index + 1}/${rm.total}</div>
+        <div style="font-size:16px; opacity:.85;">${cur.template.name} · ${stars}</div>`;
+      document.body.appendChild(head);
+      this._head = head;
+    }
     Logger.game('COUNTDOWN: 3');
   }
 

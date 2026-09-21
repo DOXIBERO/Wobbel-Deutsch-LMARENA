@@ -51,6 +51,9 @@ export class CameraController {
       );
     }
     this._desired.copy(this.target.position).add(this.offset);
+    // Snap after teleports/respawns/round resets: a far-behind camera
+    // would invert the camera-relative strafe while it catches up.
+    if (this.camera.position.distanceTo(this._desired) > 14) this.camera.position.copy(this._desired);
     const k = 1 - Math.pow(1 - this.lerpSpeed, dt * 60); // frame-rate independent
     this.camera.position.lerp(this._desired, k);
 

@@ -158,6 +158,16 @@ export class WordGate {
     if (lane === this.correctIndex) {
       this.passed = true;
       this.onCorrect({ gate: this, word: this.options[this.correctIndex] });
+    } else if (lane === -1) {
+      // Crossed the line outside every door = slipped through a wall seam:
+      // treat as wrong (penalty), shove the bean back AND line it up with the
+      // nearest door so the next approach is a legal one.
+      const nearest = DOOR_XS.reduce((a, b) =>
+        Math.abs(b - beanBody.position.x) < Math.abs(a - beanBody.position.x) ? b : a);
+      beanBody.position.z = this.z + 0.9;
+      beanBody.position.x = nearest;
+      beanBody.velocity.z = 3;
+      this.onWrong({ gate: this, word: this.options[lane >= 0 ? lane : 0] });
     }
   }
 

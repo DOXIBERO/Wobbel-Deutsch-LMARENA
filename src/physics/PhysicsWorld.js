@@ -13,6 +13,7 @@ class PhysicsWorld {
   constructor() {
     this.world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
     this.world.broadphase = new CANNON.SAPBroadphase(this.world);
+    this.world.broadphase.axisIndex = 2;   // course runs along z — sort on the axis of travel
     this.world.allowSleep = true;
 
     // ── Surface materials (Part 007)
