@@ -24,7 +24,7 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push('CONSOLE: ' + 
 page.on('response', (r) => { if (r.status() >= 400) errors.push(`HTTP ${r.status()}: ${r.url()}`); });
 
 console.log('1) load…');
-await page.goto('http://localhost:8021/', { waitUntil: 'networkidle2', timeout: 90000 });
+await page.goto('http://localhost:8022/', { waitUntil: 'networkidle2', timeout: 90000 });
 
 // wait for the boot veil to disappear (auto BOOT→MENU after 1s of game time)
 for (let i = 0; i < 60; i++) {
@@ -118,29 +118,38 @@ console.log('   📸 playing spawn');
 
 // steer through the gates: hold W; correct lane X from __wo
 const finished = await (async () => {
-  for (let i = 0; i < 100; i++) {
+  // In-page bot (same recipe as b2-test): WASD via the polled keys Set,
+  // hops via REAL keydown events (jump is event-driven → tryJump()).
+  await page.evaluate(() => {
+    const g = window.__wo;
+    window.__tick = 0;
+    window.__bot = setInterval(() => {
+      window.__tick++;
+      if (g.state.current !== 'PLAYING') { clearInterval(window.__bot); return; }
+      const keys = g.inputManager.keys;
+      const playing = g.state.impls.PLAYING;
+      const active = playing.gates?.find((gt) => !gt.passed);
+      const tx = [-3, 0, 3][active ? active.correctIndex : 1] ?? 0;
+      const { x, y, z } = g.bean.body.position;
+      const gateZ = active ? -15 - active.index * 15 : -999;
+      const nearGate = active && z - gateZ < 6 && z - gateZ > -1;
+      const t = window.__tick;
+      if (!nearGate || t % 2 === 0) keys.add('KeyW'); else keys.delete('KeyW');
+      keys.delete('KeyA'); keys.delete('KeyD');
+      if (x < tx - 0.3) keys.add('KeyD'); else if (x > tx + 0.3) keys.add('KeyA');
+      const needHop = (z < -43 && z > -52 && t % 5 === 0)
+                   || (t > 30 && Math.abs(g.bean.body.velocity.z) < 0.4);
+      if (y < 0.7 && needHop) window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
+    }, 120);
+  });
+  for (let i = 0; i < 120; i++) {
     const state = await page.evaluate(() => {
       const g = window.__wo;
-      if (!g || g.state.current !== 'PLAYING') return { done: g.state.current };
-      const gate = g.roundWords ? null : null;
-      // current gate = first not-passed
-      const st = g.state;
-      const playing = st.impls.PLAYING;
-      const active = playing.gates?.find((gt) => !gt.passed);
-      const lane = active ? active.correctIndex : -1;
-      const beanZ = g.bean.body.position.z;
-      const beanX = g.bean.body.position.x;
-      return { done: false, lane, beanZ, beanX, active: !!active };
+      return { done: g.state.current === 'PLAYING' ? false : g.state.current };
     }).catch(() => ({ done: 'err' }));
     if (state.done) return state.done;
-
-    // keyboard: forward + steer toward the correct lane center
-    const targetX = [-3, 0, 3][state.lane] ?? 0;
-    const keys = state.beanX < targetX - 0.4 ? 'KeyD' : state.beanX > targetX + 0.4 ? 'KeyA' : null;
-    await page.keyboard.down('KeyW');
-    if (keys) { await page.keyboard.down(keys); await new Promise((r) => setTimeout(r, 120)); await page.keyboard.up(keys); }
-    await new Promise((r) => setTimeout(r, 250));
     if (i % 12 === 0) await page.screenshot({ path: `${OUT}/e4-run-${i}.png` });
+    await new Promise((r) => setTimeout(r, 1000));
   }
   return 'timeout';
 })();
@@ -155,5 +164,17 @@ const final = await page.evaluate(() => ({
 })).catch(() => ({}));
 console.log('   final:', JSON.stringify(final));
 
-console.log('4) errors during session:', errors.length ? errors.slice(0, 12) : 'NONE ✅');
+console.log('4) errors during session:',
+  errors.filter((e) => !e.includes('GermanVoice')).length
+    ? errors.slice(0, 12) : 'NONE ✅ (GermanVoice headless noise only)');
+
+// ── Verdict ──
+const hardErrors = errors.filter((e) => !e.includes('GermanVoice'));
+const fails = [];
+if (finished !== 'ROUND_END') fails.push(`drive=${finished}`);
+if (final?.stats?.reason !== 'finish') fails.push('no finish stat');
+if ((final?.stats?.correct ?? 0) < 2) fails.push(`gates ${final?.stats?.correct}/${final?.stats?.total}`);
+if (hardErrors.length) fails.push(`${hardErrors.length} page errors`);
+if (fails.length) { console.error('E2E-FAIL:', fails.join(' | ')); process.exit(1); }
+console.log(`E2E PASS: full round finished (${final.stats.correct}/${final.stats.total} gates, score ${final.stats.score}, rank ${final.stats.rank})`);
 await browser.close();

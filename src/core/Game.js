@@ -28,6 +28,15 @@ import { SaveSystem } from './SaveSystem.js';
 import { HUD } from '../ui/HUD.js';
 import { sfx } from '../audio/Sfx.js';
 import { DebugPanel } from './DebugPanel.js';
+import { BeanAnimator } from '../player/BeanAnimator.js';
+import { WobbleSystem } from '../physics/WobbleSystem.js';
+import { BeanCollisions } from '../physics/BeanCollisions.js';
+import { TouchControls } from './TouchControls.js';
+import { germanVoice } from '../audio/GermanVoice.js';
+import { soundFX } from '../audio/SoundFX.js';
+import { music } from '../audio/MusicSystem.js';
+import { AudioSync } from '../audio/AudioSync.js';
+import { WordPromptHUD } from '../ui/WordPromptHUD.js';
 import { BootState } from '../states/BootState.js';
 import { MenuState } from '../states/MenuState.js';
 import { CountdownState } from '../states/CountdownState.js';
@@ -59,6 +68,22 @@ export class Game {
     this.saveSystem = new SaveSystem({ profile: this.profile, srs: this.srs }); // 17+18 wrapper
     this.hud = new HUD();
 
+    // ── Batch 2 systems
+    this.animator = new BeanAnimator(this.bean);          // 026-030
+    this.wobble = new WobbleSystem();                     // 031
+    this.collisions = null;                               // 033 (per round refs)
+    this.ragdoll = null;                                  // 034 (per round refs)
+    this.touch = new TouchControls(this.inputManager);    // 036
+    this.inputManager.touch = this.touch;
+    this.wordPrompt = new WordPromptHUD();                // 041
+    this.audioSync = new AudioSync(this.wordPrompt);      // 042
+    this.soundFX = soundFX;                               // 038
+    this.voice = germanVoice;                             // 037
+    this.music = music;                                   // 039
+
+    // Volume from profile settings
+    soundFX.setVolume(this.profile.settings.audioVol);
+
     // ── Round/session state
     this.session = null;          // { presets, index }
     this.currentRound = null;     // active preset
@@ -81,13 +106,36 @@ export class Game {
 
     // ── Loop wiring (Part 019): update → state + physics + camera + input
     this.loop.onUpdate((dt) => {
-      this.inputManager.update(dt);
       this.state.onUpdate(dt);
-      if (!this.physicsFrozen) {
-        this.physics.step(dt);
-        this.physics.syncPairs();
+      if (this.physicsFrozen) return;
+
+      // Surface zone under the bean → wobble params + feel
+      const surface = this.playing?.course?.updateSurfaces?.(this.bean.body.position) ?? 'NORMAL';
+      if (surface !== this.wobble.surface) {
+        this.wobble.setSurface(surface);
+        if (surface === 'SLIME') this.inputManager.jumpImpulse = 5.6;  // 30% weaker
+        else this.inputManager.jumpImpulse = 8;
       }
-      this.cameraController.update(dt);
+
+      this.inputManager.update(dt);
+      this.physics.step(dt);
+      this.physics.syncPairs();
+
+      // Visual layers (additive over physics)
+      const v = this.bean.body.velocity;
+      this.animator.update(dt, v);
+      this.wobble.update(dt, this.bean.body, this.bean.root, v);
+      this.ragdoll?.update(dt);
+      this.playing?.course?.updateObstacles?.(dt, this.bean.body, (impact) => this.ragdoll?.maybeTrigger(impact));
+      this.playing?.zone?.updateVisual?.(dt);
+      this.wordPrompt.tick(dt);
+
+      // Camera: orbit-lerp follow (mouse look) around the bean
+      this.cameraController.update(dt, this.inputManager._pointerLocked
+        ? { yaw: this.inputManager.orbitYaw, pitch: this.inputManager.orbitPitch, zoom: this.inputManager.zoom }
+        : null);
+
+      this.collisions?.updateGrab(this.inputManager.pressed('KeyE'));
     });
     this.loop.onRender(() => renderScene());
 

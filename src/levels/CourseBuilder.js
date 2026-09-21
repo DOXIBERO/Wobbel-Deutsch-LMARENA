@@ -10,6 +10,12 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { physicsWorld } from '../physics/PhysicsWorld.js';
 import { makeTextSprite } from '../ui/TextSprite.js';
+import { SurfaceZones } from '../physics/SurfaceZones.js';
+import { MovingPlatform } from '../obstacles/MovingPlatform.js';
+import { Bumper } from '../obstacles/Bumper.js';
+import { Trampoline } from '../obstacles/Trampoline.js';
+import { SwingingHammer } from '../obstacles/SwingingHammer.js';
+import { SpinningLog } from '../obstacles/SpinningLog.js';
 import { Logger } from '../core/Logger.js';
 
 export const COURSE = {
@@ -18,6 +24,8 @@ export const COURSE = {
   halfWidth: 5,
   wallX: 5.25,
   gates: [-15, -30, -45],
+  checkpoints: [-15, -30, -45],
+  duration: 90, // full-course timer (Part 050)
 };
 
 export class CourseBuilder {
@@ -26,8 +34,54 @@ export class CourseBuilder {
     this.scene = scene;
     this.group = new THREE.Group();
     scene.add(this.group);
+    /** @type {Array<any>} */
+    this.obstacles = [];
+    this.surfaceZones = new SurfaceZones(scene);
     this.build();
-    Logger.game('CourseBuilder: course ready (START → ZIEL, 65 m)');
+    this.buildObstacles();
+    Logger.game('CourseBuilder: full course ready (3 gates + 6 obstacle types + 2 zones)');
+  }
+
+  /** Part 050: bumpers, platform, hammer, trampoline, log, ice + slime. */
+  buildObstacles() {
+    const sparkless = (v) => this._lastSpark = v;
+    // 2 bumpers (z=-8, z=-12)
+    this.obstacles.push(new Bumper(this.scene, { x: -1.5, z: -8, onSpark: sparkless }));   // between lanes
+    this.obstacles.push(new Bumper(this.scene, { x: -1.5, z: -12, onSpark: sparkless }));  // center-left, between lanes
+    // Horizontal moving platform (z=-13 area)
+    this.obstacles.push(new MovingPlatform(this.scene, {
+      type: 'HORIZONTAL', speed: 2.5,
+      start: { x: -1.8, y: 0.15, z: -13.5 }, end: { x: 1.8, y: 0.15, z: -13.5 }, // low: roll over it
+    }));
+    // ICE zone (z −20..−25)
+    this.surfaceZones.addZone({ x: 0, z: -22.5 }, { w: 10, d: 5 }, 'ICE'); // pure floor: no blockers
+    // Swinging hammer (z=-25)
+    this.hammer = new SwingingHammer(this.scene, { x: 0, z: -26.5, onSmash: sparkless });
+    // (post-ice, before Gate 2 — swings across, time your run)
+    // SLIME zone (z −30..−35)
+    this.surfaceZones.addZone({ x: 0, z: -32.5 }, { w: 10, d: 5 }, 'SLIME');
+    // Trampoline (z=-40)
+    this.obstacles.push(new Trampoline(this.scene, { x: 3.2, z: -40 })); // off the racing line
+    // Spinning log (z=-48)
+    this.obstacles.push(new SpinningLog(this.scene, { x: 0, z: -48, y: 0.4, speed: 2 }));
+  }
+
+  /** Per-frame obstacle animation. */
+  updateObstacles(dt, beanBody, onRagdoll) {
+    for (const o of this.obstacles) o.update?.(dt);
+    this.hammer?.update(dt, beanBody, onRagdoll);
+  }
+
+  /** @param {{x:number, z:number}} beanPos */
+  updateSurfaces(beanPos) {
+    return this.surfaceZones.update(beanPos);
+  }
+
+  /** Furthest checkpoint z the bean has passed (ragdoll respawn). */
+  lastCheckpointZ(beanZ) {
+    let z = COURSE.startZ - 5;
+    for (const c of COURSE.checkpoints) if (beanZ <= c) break; else z = c;
+    return z + 2;
   }
 
   build() {

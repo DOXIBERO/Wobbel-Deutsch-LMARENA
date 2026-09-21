@@ -139,6 +139,28 @@ export class WordGate {
     Logger.game(`WordGate #${this.index + 1}: ACTIVATED`);
   }
 
+  /**
+   * Deterministic pass check — runs every frame for the ACTIVE gate.
+   * cannon-es contact events are unreliable for pass-through doors
+   * (collisionResponse=false pairs may generate no contact), so we
+   * detect the plane crossing geometrically instead.
+   * @param {CANNON.Body} beanBody
+   */
+  update(beanBody) {
+    if (!this.active || this.passed) return;
+    const pz = beanBody.position.z;
+    if (this._prevZ === null) { this._prevZ = pz; return; }
+    const crossed = this._prevZ > this.z && pz <= this.z; // runs toward −z
+    this._prevZ = pz;
+    if (!crossed) return;
+    // Which door span was the bean in when it crossed?
+    const lane = DOOR_XS.findIndex((x) => Math.abs(beanBody.position.x - x) <= DOOR_W / 2);
+    if (lane === this.correctIndex) {
+      this.passed = true;
+      this.onCorrect({ gate: this, word: this.options[this.correctIndex] });
+    }
+  }
+
   /** Did the player just approach? (speak once on approach) */
   maybeSpeakOnApproach(playerZ) {
     if (this.active && !this.passed && !this._spokeNear && playerZ - this.z < 10) {

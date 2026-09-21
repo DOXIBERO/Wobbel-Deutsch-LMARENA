@@ -33,6 +33,30 @@ export class InputManager {
     this._diveCooldown = 0;
     this._stunnedUntil = 0;
 
+    // ── Mouse (Part 035): pointer lock orbit + scroll zoom
+    this.orbitYaw = 0;      // camera orbit around the bean
+    this.orbitPitch = 0.5;  // 20°..70° in radians (0.35..1.22)
+    this.zoom = 10;         // camera offset length (5..20)
+    this._pointerLocked = false;
+    this._raycaster = null;
+    this._groundPlane = null;
+
+    window.addEventListener('click', () => {
+      const canvas = document.getElementById('game-canvas');
+      if (canvas && !this._pointerLocked) canvas.requestPointerLock?.();
+    });
+    document.addEventListener('pointerlockchange', () => {
+      this._pointerLocked = document.pointerLockElement != null;
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!this._pointerLocked) return;
+      this.orbitYaw -= e.movementX * 0.0026;
+      this.orbitPitch = Math.max(0.35, Math.min(1.22, this.orbitPitch + e.movementY * 0.0022));
+    });
+    window.addEventListener('wheel', (e) => {
+      this.zoom = Math.max(5, Math.min(20, this.zoom + Math.sign(e.deltaY) * 1.2));
+    }, { passive: true });
+
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
       this.keys.add(e.code);
@@ -92,8 +116,9 @@ export class InputManager {
     this._right.crossVectors(this._camDir, this._up);
 
     const axis = (pos, neg) => (this.keys.has(pos) ? 1 : 0) - (this.keys.has(neg) ? 1 : 0);
-    const fwd = axis('KeyW', 'KeyS') + axis('ArrowUp', 'ArrowDown');
-    const strafe = axis('KeyD', 'KeyA') + axis('ArrowRight', 'ArrowLeft');
+    const joy = this.touch?.axes?.() ?? { x: 0, y: 0 };
+    const fwd = axis('KeyW', 'KeyS') + axis('ArrowUp', 'ArrowDown') + joy.y;
+    const strafe = axis('KeyD', 'KeyA') + axis('ArrowRight', 'ArrowLeft') + joy.x;
     if (this.stunned) { this._force.set(0, 0); return; }
 
     // Smooth toward the target force over ~0.1 s

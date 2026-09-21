@@ -38,9 +38,18 @@ export class CameraController {
   get shaking() { return this._shakeIntensity > 0 && this._shakeElapsed < this._shakeDuration; }
 
   /** @param {number} dt fixed delta */
-  update(dt) {
+  update(dt, orbit = null) {
     if (!this.target) return;
 
+    // Orbit offset (mouse look / zoom): yaw-pitch-zoom spherical around bean
+    if (orbit) {
+      const { yaw, pitch, zoom } = orbit;
+      this.offset.set(
+        Math.sin(yaw) * Math.cos(pitch) * zoom,
+        Math.sin(pitch) * zoom,
+        Math.cos(yaw) * Math.cos(pitch) * zoom
+      );
+    }
     this._desired.copy(this.target.position).add(this.offset);
     const k = 1 - Math.pow(1 - this.lerpSpeed, dt * 60); // frame-rate independent
     this.camera.position.lerp(this._desired, k);
