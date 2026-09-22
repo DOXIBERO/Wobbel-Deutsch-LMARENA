@@ -30,7 +30,7 @@ export class BotMovement {
     this.waypoints.push({ x: 0, z: nav.courseLength });
     this.offset = (this.rng() - 0.5) * 2.4;          // personal lane offset
     this.offsetTimer = 3 + this.rng() * 4;
-    this.bias = (this.rng() - 0.5) * 6;              // small personal spread: −3…+3 m vs player
+    this.holdDist = 2.5 + this.rng() * 6;            // personal slot: 2.5–8.5 m ahead of the player
     this.baseSpeed = 5.6 + bot.skill * 2.6;          // Klaus ~6.1 … Otto ~8.1 (player pace ~7.6)
     this.speedMul = 1;
     this.stuckT = 0;
@@ -64,18 +64,15 @@ export class BotMovement {
     this.speedMul = 1 + Math.sin(p.z * 1.7 + this.bot.skill * 10) * 0.1;
     if (ctx.surface === 'ICE') this.speedMul *= this.bot.skill > 0.6 ? 0.55 : 1.05; // pros brake
     if (ctx.surface === 'SLIME') this.speedMul *= 0.7;
-    // ── HARD LEASH vs the player (Fall Guys crowd): the pack lives within
-    //    ±10 m of you — beans too far ahead wait, beans behind sprint in.
-    //    Skills still decide gates/obstacles inside that window.
+    // ── PERSONAL HOVER DISTANCE (Fall Guys crowd): every bot keeps its own
+    //    2.5–8.5 m slot ahead of the player → the pack fills the view and
+    //    races WITH you instead of disappearing over the horizon.
     const ahead = (ctx.playerZ ?? 4) - p.z;    // >0 = bot is ahead of the player
+    const err = ahead - this.holdDist;         // + = too far ahead, − = lagging
     let speed;
-    if (ahead > 10) speed = 0;                          // wait at the front of the pack
-    else if (ahead < -10) speed = 18;                   // sprint back into view
-    else {
-      speed = this.baseSpeed * this.speedMul;
-      if (ahead > 6) speed *= 0.5;                      // hover near the leash edges
-      if (ahead < -6) speed *= 1.7;
-    }
+    if (err > 7) speed = -7;                            // way out front → trot back
+    else if (err < -11) speed = 18;                     // dropped way behind → sprint in
+    else speed = Math.max(1.5, Math.min(12, this.baseSpeed * this.speedMul * (1 + err * 0.24)));
 
     // ── Velocity steering (robust): drive speed directly instead of
     //    accumulating forces — no flying, no drifting, no wall-grinding.

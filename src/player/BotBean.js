@@ -84,6 +84,8 @@ export class BotBean {
     if (!this.alive) return;
     const v = this.body.velocity;
     if (v.lengthSquared() > 1600) v.scale(40 / v.length(), v);   // solver hiccup guard
+    if (v.y > 8) v.y = 8;            // bumper/platform pops stay hop-sized (no floaters)
+    else if (v.y < -22) v.y = -22;
     // ── Course bounds: racers never leave the track (Fall Guys walls).
     //    Out of bounds → respawn at the last checkpoint instead of
     //    wandering off into the void where nobody can see them.
