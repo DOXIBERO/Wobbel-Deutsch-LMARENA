@@ -191,6 +191,12 @@ await page.evaluate(() => {
     if (stalled && active && Math.abs(x - tx) > 1.2) {
       keys.add(x > tx ? 'KeyA' : 'KeyD');
     }
+    // moving-platform zone (−19..−10): keep W held, recenter to x=0, hop rhythmically
+    if (z < -10 && z > -19 && !nearGate) {
+      keys.add('KeyW');
+      if (Math.abs(x) > 0.4) keys.add(x > 0 ? 'KeyA' : 'KeyD');
+      if (y < 0.7 && t % 8 === 0) window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
+    }
   }, 120);
 });
 

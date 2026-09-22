@@ -48,7 +48,7 @@ export class RoundManager {
 
   #makeRound(i, difficulty, usedIds = new Set()) {
     if (i === 0) {
-      return { template: structuredClone(LevelTemplates.getTemplate('classic-60')), difficulty: 1, botCount: 3, seed: null };
+      return { template: structuredClone(LevelTemplates.getTemplate('classic-60')), difficulty: 1, botCount: BOT_COUNT[1], seed: null };
     }
     const seed = (Math.random() * 0xffffffff) >>> 0;
     const d = Math.min(3, difficulty);

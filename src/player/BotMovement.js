@@ -22,14 +22,16 @@ export class BotMovement {
     this.bot = bot;
     this.finishZ = nav.finishZ;
     this.rng = nav.rng ?? Math.random;
-    // Waypoints down the center; the decider/steering adds offsets
+    // Waypoints from just behind the start line down to the finish —
+    // the ACTIVE waypoint is always the nearest one AHEAD of the bot
+    // (stateless → bots can never "escape" the path).
     this.waypoints = [];
-    for (let z = 0; z > nav.courseLength; z -= WAYPOINT_STEP) this.waypoints.push({ x: 0, z });
+    for (let z = 8; z > nav.courseLength; z -= WAYPOINT_STEP) this.waypoints.push({ x: 0, z });
     this.waypoints.push({ x: 0, z: nav.courseLength });
-    this.wpIndex = 0;
     this.offset = (this.rng() - 0.5) * 2.4;          // personal lane offset
     this.offsetTimer = 3 + this.rng() * 4;
-    this.baseSpeed = 4 + bot.skill * 3;              // Fritz 4.5 … Otto 6.85
+    this.bias = (this.rng() - 0.5) * 6;              // small personal spread: −3…+3 m vs player
+    this.baseSpeed = 5.6 + bot.skill * 2.6;          // Klaus ~6.1 … Otto ~8.1 (player pace ~7.6)
     this.speedMul = 1;
     this.stuckT = 0;
     this.jumpCd = 0;
@@ -39,20 +41,19 @@ export class BotMovement {
 
   /**
    * @param {number} dt
-   * @param {object} ctx { gates, hazards, surface, windLean } live course info
+   * @param {object} ctx { gates, hazards, surface, playerZ } live course info
    */
   update(dt, ctx = {}) {
     if (!this.bot.alive || this.bot.finished || this.bot.ragdoll.active) return;
     const body = this.bot.body;
     const p = body.position;
-    this.jumpCd = Math.max(0, this.jumpCd - dt);
 
-    // ── Waypoint advance (2 m threshold)
-    let wp = this.waypoints[Math.min(this.wpIndex, this.waypoints.length - 1)];
-    while (wp && p.z - wp.z < 2 && this.wpIndex < this.waypoints.length - 1) {
-      this.wpIndex += 1;
-      wp = this.waypoints[this.wpIndex];
+    // ── Active waypoint = nearest waypoint still ahead of the bot
+    let wp = this.waypoints[this.waypoints.length - 1];
+    for (const w of this.waypoints) {
+      if (w.z < p.z - 1) { wp = w; break; }   // first waypoint behind→ahead boundary
     }
+    this.jumpCd = Math.max(0, this.jumpCd - dt);
 
     // ── Speed personality: ±10% wander, surface adjustments
     this.offsetTimer -= dt;
@@ -63,12 +64,23 @@ export class BotMovement {
     this.speedMul = 1 + Math.sin(p.z * 1.7 + this.bot.skill * 10) * 0.1;
     if (ctx.surface === 'ICE') this.speedMul *= this.bot.skill > 0.6 ? 0.55 : 1.05; // pros brake
     if (ctx.surface === 'SLIME') this.speedMul *= 0.7;
+    // ── HARD LEASH vs the player (Fall Guys crowd): the pack lives within
+    //    ±10 m of you — beans too far ahead wait, beans behind sprint in.
+    //    Skills still decide gates/obstacles inside that window.
+    const ahead = (ctx.playerZ ?? 4) - p.z;    // >0 = bot is ahead of the player
+    let speed;
+    if (ahead > 10) speed = 0;                          // wait at the front of the pack
+    else if (ahead < -10) speed = 18;                   // sprint back into view
+    else {
+      speed = this.baseSpeed * this.speedMul;
+      if (ahead > 6) speed *= 0.5;                      // hover near the leash edges
+      if (ahead < -6) speed *= 1.7;
+    }
 
-    // ── Forward force
-    const fwd = this.baseSpeed * this.speedMul;
-    body.applyForce(new CANNON.Vec3(0, 0, -fwd), p);
-
-    // ── Steering: waypoint X + personal offset + decider target + avoidance
+    // ── Velocity steering (robust): drive speed directly instead of
+    //    accumulating forces — no flying, no drifting, no wall-grinding.
+    //    Gravity still owns y (jumps/launches stay physical).
+    this.holdZ = null;
     let targetX = wp.x + this.offset + (ctx.targetX ?? 0);
     // Avoid the bean directly ahead (±1 m sidestep)
     for (const other of ctx.nearby ?? []) {
@@ -76,21 +88,16 @@ export class BotMovement {
       const o = other.body.position;
       if (o.z < p.z && p.z - o.z < 1.5 && Math.abs(o.x - p.x) < 0.9) targetX += p.x > o.x ? 1 : -1;
     }
-    const dx = targetX - p.x;
-    body.applyForce(new CANNON.Vec3(Math.max(-5, Math.min(5, dx)), 0, 0), p);
+    if (this.holdZ !== null && this.holdZ !== undefined) {
+      // Hammer timing: pause ON the spot (velocity zeroed, gravity holds)
+      body.velocity.x = 0; body.velocity.z = 0;
+    } else {
+      body.velocity.x = Math.max(-speed * 0.8, Math.min(speed * 0.8, (targetX - p.x) * 2));
+      body.velocity.z = -speed;
+    }
 
     // ── Obstacle-specific jumps (Part 064)
     this.#obstacleBehavior(p, ctx);
-
-    // ── Stuck recovery: barely moving for 2 s → burst + hop
-    if (Math.abs(body.velocity.z) < 1 && !this.bot.ragdoll.active) {
-      this.stuckT += dt;
-      if (this.stuckT > 2) {
-        body.applyForce(new CANNON.Vec3(0, 0, -fwd * 4), p);
-        this.#jump();
-        this.stuckT = 0;
-      }
-    } else this.stuckT = 0;
   }
 
   #obstacleBehavior(p, ctx) {

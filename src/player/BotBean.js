@@ -58,7 +58,7 @@ export class BotBean {
     // ── Physics sphere (same as player) — group 4: world + bots, never player
     this.body = new CANNON.Body({
       mass: 1, shape: new CANNON.Sphere(0.5),
-      linearDamping: 0.05, angularDamping: 0.3,
+      linearDamping: 0.3, angularDamping: 0.5,   // shoved beans settle fast (no rocketing)
       collisionFilterGroup: 4, collisionFilterMask: 1 | 4,
     });
     this.body.position.set(cfg.spawn.x, 1.2, cfg.spawn.z);
@@ -84,11 +84,26 @@ export class BotBean {
     if (!this.alive) return;
     const v = this.body.velocity;
     if (v.lengthSquared() > 1600) v.scale(40 / v.length(), v);   // solver hiccup guard
+    // ── Course bounds: racers never leave the track (Fall Guys walls).
+    //    Out of bounds → respawn at the last checkpoint instead of
+    //    wandering off into the void where nobody can see them.
+    const p = this.body.position;
+    if (p.y > 12) { p.y = 2; this.body.velocity.set(0, 0, 0); }   // platform-squeeze launch cap
+    if (p.y < -6 || p.z > 12 || p.z < -120 || Math.abs(p.x) > 6.5) {
+      this.#respawn();
+      return;
+    }
     this.physicsWorldSync();
     this.animator.update(dt, v);
     this.wobble.update(dt, this.body, this.root, v);
     this.ragdoll.update(dt);
-    if (this.body.position.y < -8) this.eliminate();   // fell off the world
+  }
+
+  /** Back on the track (checkpoint, never ahead of the start line). */
+  #respawn() {
+    const z = this.ragdoll.checkpointZ ? this.ragdoll.checkpointZ() : 4;
+    this.body.position.set((Math.random() - 0.5) * 5, 1.2, Math.min(4, z));
+    this.body.velocity.set(0, 0, 0);
   }
 
   /** Copy physics pose to the visual root. */

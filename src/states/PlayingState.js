@@ -348,7 +348,7 @@ export class PlayingState {
 
     // ── Bots + checkpoints (Parts 065, 069)
     if (this.bots) {
-      this.bots.update(dt, { gates: this.gates, surface: this._surfaceNow });
+      this.bots.update(dt, { gates: this.gates, surface: this._surfaceNow, playerZ: z });
       const beanRows = [{ key: 'player', body: g.bean.body },
         ...this.bots.bots.filter((b) => b.alive).map((b) => ({ key: b.name, body: b.body }))];
       this.checkpoints?.update(dt, beanRows);

@@ -8,7 +8,7 @@
  */
 import { Logger } from './Logger.js';
 
-export const BOT_COUNT = { 1: 3, 2: 5, 3: 7 };
+export const BOT_COUNT = { 1: 10, 2: 12, 3: 14 };
 
 export class DifficultyScaler {
   constructor() {
